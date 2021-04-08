@@ -2,6 +2,9 @@ package simpledb;
 
 import java.io.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -26,13 +29,16 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
+    public int numPages;
+    public HashMap<PageId, Page> pageMap;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
      * @param numPages maximum number of pages in this buffer pool.
      */
     public BufferPool(int numPages) {
-        // some code goes here
+        this.numPages = numPages;
     }
     
     public static int getPageSize() {
@@ -47,6 +53,44 @@ public class BufferPool {
     // THIS FUNCTION SHOULD ONLY BE USED FOR TESTING!!
     public static void resetPageSize() {
     	BufferPool.pageSize = PAGE_SIZE;
+    }
+
+    public static class PageItem implements Page {
+        public PageId pageId;
+
+        public PageItem(PageId pageId) {
+            this.pageId = pageId;
+        }
+
+        @Override
+        public PageId getId() {
+            return pageId;
+        }
+
+        @Override
+        public TransactionId isDirty() {
+            return null;
+        }
+
+        @Override
+        public void markDirty(boolean dirty, TransactionId tid) {
+
+        }
+
+        @Override
+        public byte[] getPageData() {
+            return new byte[0];
+        }
+
+        @Override
+        public Page getBeforeImage() {
+            return null;
+        }
+
+        @Override
+        public void setBeforeImage() {
+
+        }
     }
 
     /**
@@ -64,10 +108,14 @@ public class BufferPool {
      * @param pid the ID of the requested page
      * @param perm the requested permissions on the page
      */
-    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
-        throws TransactionAbortedException, DbException {
-        // some code goes here
-        return null;
+    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
+            throws TransactionAbortedException, DbException {
+        if (pageMap.containsKey(pid)) return pageMap.get(pid);
+        if (pageMap.size() == pageSize) throw new DbException("@getPage: Buffer full.");
+        else {
+            pageMap.put(pid, new PageItem(pid));
+            return pageMap.get(pid);
+        }
     }
 
     /**
