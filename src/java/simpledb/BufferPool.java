@@ -1,5 +1,7 @@
 package simpledb;
 
+import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
+
 import java.io.*;
 
 import java.util.ArrayList;
@@ -39,6 +41,7 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         this.numPages = numPages;
+        this.pageMap = new HashMap<>();
     }
     
     public static int getPageSize() {
@@ -110,11 +113,17 @@ public class BufferPool {
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-        if (pageMap.containsKey(pid)) return pageMap.get(pid);
-        if (pageMap.size() == pageSize) throw new DbException("@getPage: Buffer full.");
-        else {
-            pageMap.put(pid, new PageItem(pid));
+        try {
+            if (pageMap.containsKey(pid)) return pageMap.get(pid);
+            if (pageMap.size() == pageSize) throw new DbException("@getPage: Buffer full.");
+
+            DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
+            byte[] data = f.readPage(pid).getPageData();
+            pageMap.put(pid, new HeapPage((HeapPageId) pid, data));
             return pageMap.get(pid);
+
+        } catch (IOException e) {
+            throw new TransactionAbortedException();
         }
     }
 

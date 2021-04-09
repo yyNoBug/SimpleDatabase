@@ -2,8 +2,6 @@ package simpledb;
 
 import java.util.*;
 import java.io.*;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
  * Each instance of HeapPage stores data for one page of HeapFiles and 
@@ -307,14 +305,14 @@ public class HeapPage implements Page {
      * (note that this iterator shouldn't return tuples in empty slots!)
      */
     public Iterator<Tuple> iterator() {
-        return new tupleIterator(this.tuples);
+        return new HpTpIterator(this.tuples);
     }
 
-    static class tupleIterator implements Iterator<Tuple> {
+    static private class HpTpIterator implements Iterator<Tuple> {
         int loc = 0;
         Tuple[] tuples;
 
-        public tupleIterator(Tuple[] tuples) {
+        public HpTpIterator(Tuple[] tuples) {
             this.tuples = tuples;
         }
 
