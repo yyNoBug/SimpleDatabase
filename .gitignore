@@ -3,3 +3,5 @@
 /dist/
 /log
 /simpledb.iml
+/some_data_file.*
+/src/java/simpledb/test.java
