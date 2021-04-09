@@ -318,6 +318,7 @@ public class HeapPage implements Page {
 
         @Override
         public boolean hasNext() {
+            if (loc >= tuples.length) return false;
             return tuples[loc] != null;
         }
 
