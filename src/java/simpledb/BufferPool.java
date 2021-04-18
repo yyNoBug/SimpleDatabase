@@ -215,8 +215,9 @@ public class BufferPool {
      */
     public void insertTuple(TransactionId tid, int tableId, Tuple t)
         throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        // not necessary for lab1
+        DbFile f = Database.getCatalog().getDatabaseFile(tableId);
+        ArrayList<Page> dirtyPages = f.insertTuple(tid, t);
+        for (Page page: dirtyPages) page.markDirty(true, tid);
     }
 
     /**
@@ -234,8 +235,9 @@ public class BufferPool {
      */
     public  void deleteTuple(TransactionId tid, Tuple t)
         throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        // not necessary for lab1
+        DbFile f = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+        ArrayList<Page> dirtyPages = f.deleteTuple(tid, t);
+        for (Page page: dirtyPages) page.markDirty(true, tid);
     }
 
     /**
@@ -256,8 +258,15 @@ public class BufferPool {
         are removed from the cache so they can be reused safely
     */
     public synchronized void discardPage(PageId pid) {
-        // some code goes here
-        // not necessary for lab1
+        if (!pageMap.containsKey(pid)) return;
+        try {
+            if (dirtyMap.get(pid)) flushPage(pid);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        pageMap.remove(pid);
+        dirtyMap.remove(pid);
+        lruQue.remove(pid);
     }
 
     /**

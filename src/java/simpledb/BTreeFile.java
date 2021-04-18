@@ -6,6 +6,8 @@ import java.nio.channels.FileChannel;
 
 import simpledb.Predicate.Op;
 
+import javax.xml.crypto.Data;
+
 /**
  * BTreeFile is an implementation of a DbFile that stores a B+ tree.
  * Specifically, it stores a pointer to a root page,
@@ -254,19 +256,51 @@ public class BTreeFile implements DbFile {
 	 * @throws IOException
 	 * @throws TransactionAbortedException
 	 */
+	@SuppressWarnings("DuplicatedCode")
 	protected BTreeLeafPage splitLeafPage(TransactionId tid, HashMap<PageId, Page> dirtypages,
 										  BTreeLeafPage page, Field field)
 			throws DbException, IOException, TransactionAbortedException {
-		// some code goes here
-        //
         // Split the leaf page by adding a new page on the right of the existing
 		// page and moving half of the tuples to the new page.  Copy the middle key up
 		// into the parent page, and recursively split the parent as needed to accommodate
 		// the new entry.  getParentWithEmtpySlots() will be useful here.  Don't forget to update
 		// the sibling pointers of all the affected leaf pages.  Return the page into which a 
 		// tuple with the given key field should be inserted.
-        return null;
-		
+
+		assert page.getNumEmptySlots() == 0;
+
+		BTreePageId pid = page.getId();
+		BTreeLeafPage newPage = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+		BTreePageId newPid = newPage.getId();
+		BTreePageId rightPid = page.getRightSiblingId();
+		if (rightPid != null) {
+			BTreeLeafPage rightPage = (BTreeLeafPage) getPage(tid, dirtypages, rightPid, Permissions.READ_WRITE);
+			rightPage.setLeftSiblingId(newPid);
+			newPage.setRightSiblingId(rightPid);
+		}
+		newPage.setLeftSiblingId(pid);
+		page.setRightSiblingId(newPid);
+
+		BTreeLeafPageReverseIterator itr = (BTreeLeafPageReverseIterator) page.reverseIterator();
+		int max_size = page.getMaxTuples();
+		int split_size = max_size / 2;
+		while (newPage.getNumTuples() < split_size) {
+			Tuple tuple = itr.next();
+			page.deleteTuple(tuple);
+			newPage.insertTuple(tuple);
+		}
+
+		Tuple middleTuple = itr.next();
+		Field middleField = middleTuple.getField(keyField);
+		BTreeEntry newEntry = new BTreeEntry(middleField, pid, newPid);
+		BTreePageId parentPid = page.getParentId();
+		BTreeInternalPage parentPage = getParentWithEmptySlots(tid, dirtypages, parentPid, middleField);
+		parentPage.insertEntry(newEntry);
+		page.setParentId(parentPage.getId());
+		newPage.setParentId(parentPage.getId());
+
+		if (field.compare(Op.LESS_THAN_OR_EQ, middleField)) return page;
+		else return newPage;
 	}
 	
 	/**
@@ -291,11 +325,41 @@ public class BTreeFile implements DbFile {
 	 * @throws IOException
 	 * @throws TransactionAbortedException
 	 */
-	protected BTreeInternalPage splitInternalPage(TransactionId tid, HashMap<PageId, Page> dirtypages, 
-			BTreeInternalPage page, Field field) 
+
+	public static int cntxxx = 0;
+
+	@SuppressWarnings("DuplicatedCode")
+	protected BTreeInternalPage splitInternalPage(TransactionId tid, HashMap<PageId, Page> dirtypages,
+												  BTreeInternalPage page, Field field)
 					throws DbException, IOException, TransactionAbortedException {
-		// some code goes here
-		return null;
+
+		assert page.getNumEmptySlots() == 0;
+
+		BTreePageId pid = page.getId();
+		BTreeInternalPage newPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+		BTreePageId newPid = newPage.getId();
+
+		BTreeInternalPageReverseIterator itr = (BTreeInternalPageReverseIterator) page.reverseIterator();
+		int max_size = page.getMaxEntries();
+		int split_size = max_size / 2;
+		while (newPage.getNumEntries() < split_size) {
+			BTreeEntry entry = itr.next();
+			page.deleteKeyAndRightChild(entry);
+			newPage.insertEntry(entry);
+		}
+
+		BTreeEntry middleEntry = itr.next();
+		Field middleField = middleEntry.getKey();
+		BTreeEntry newEntry = new BTreeEntry(middleField, pid, newPid);
+		page.deleteKeyAndRightChild(middleEntry);
+		BTreePageId parentPid = page.getParentId();
+		BTreeInternalPage parentPage = getParentWithEmptySlots(tid, dirtypages, parentPid, middleField);
+		parentPage.insertEntry(newEntry);
+		updateParentPointers(tid, dirtypages, page);
+		updateParentPointers(tid, dirtypages, newPage);
+
+		if (field.compare(Op.LESS_THAN_OR_EQ, middleField)) return page;
+		else return newPage;
 	}
 	
 	/**
@@ -322,7 +386,7 @@ public class BTreeFile implements DbFile {
 		
 		// create a parent node if necessary
 		// this will be the new root of the tree
-		if(parentId.pgcateg() == BTreePageId.ROOT_PTR) {
+		if (parentId.pgcateg() == BTreePageId.ROOT_PTR) {
 			parent = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
 
 			// update the root pointer
@@ -391,7 +455,7 @@ public class BTreeFile implements DbFile {
 		Iterator<BTreeEntry> it = page.iterator();
 		BTreePageId pid = page.getId();
 		BTreeEntry e = null;
-		while(it.hasNext()) {
+		while (it.hasNext()) {
 			e = it.next();
 			updateParentPointer(tid, dirtypages, pid, e.getLeftChild());
 		}
@@ -460,7 +524,7 @@ public class BTreeFile implements DbFile {
 		// find and lock the left-most leaf page corresponding to the key field,
 		// and split the leaf page if there are no more slots available
 		BTreeLeafPage leafPage = findLeafPage(tid, dirtypages, rootId, Permissions.READ_WRITE, t.getField(keyField));
-		if(leafPage.getNumEmptySlots() == 0) {
+		if (leafPage.getNumEmptySlots() == 0) {
 			leafPage = splitLeafPage(tid, dirtypages, leafPage, t.getField(keyField));	
 		}
 
