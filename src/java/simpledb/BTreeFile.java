@@ -23,7 +23,7 @@ public class BTreeFile implements DbFile {
 
 	private final File f;
 	private final TupleDesc td;
-	private final int tableid ;
+	private final int tableid;
 	private int keyField;
 
 	/**
@@ -84,7 +84,7 @@ public class BTreeFile implements DbFile {
 		try {
 			bis = new BufferedInputStream(new FileInputStream(f));
 			if(id.pgcateg() == BTreePageId.ROOT_PTR) {
-				byte pageBuf[] = new byte[BTreeRootPtrPage.getPageSize()];
+				byte[] pageBuf = new byte[BTreeRootPtrPage.getPageSize()];
 				int retval = bis.read(pageBuf, 0, BTreeRootPtrPage.getPageSize());
 				if (retval == -1) {
 					throw new IllegalArgumentException("Read past end of table");
@@ -98,8 +98,8 @@ public class BTreeFile implements DbFile {
 				return p;
 			}
 			else {
-				byte pageBuf[] = new byte[BufferPool.getPageSize()];
-				if (bis.skip(BTreeRootPtrPage.getPageSize() + (id.pageNumber()-1) * BufferPool.getPageSize()) != 
+				byte[] pageBuf = new byte[BufferPool.getPageSize()];
+				if (bis.skip(BTreeRootPtrPage.getPageSize() + (id.pageNumber()-1) * BufferPool.getPageSize()) !=
 						BTreeRootPtrPage.getPageSize() + (id.pageNumber()-1) * BufferPool.getPageSize()) {
 					throw new IllegalArgumentException(
 							"Unable to seek to correct place in BTreeFile");
@@ -150,15 +150,11 @@ public class BTreeFile implements DbFile {
 		
 		byte[] data = page.getPageData();
 		RandomAccessFile rf = new RandomAccessFile(f, "rw");
-		if(id.pgcateg() == BTreePageId.ROOT_PTR) {
-			rf.write(data);
-			rf.close();
+		if (id.pgcateg() != BTreePageId.ROOT_PTR) {
+			rf.seek(BTreeRootPtrPage.getPageSize() + (page.getId().pageNumber() - 1) * BufferPool.getPageSize());
 		}
-		else {
-			rf.seek(BTreeRootPtrPage.getPageSize() + (page.getId().pageNumber()-1) * BufferPool.getPageSize());
-			rf.write(data);
-			rf.close();
-		}
+		rf.write(data);
+		rf.close();
 	}
 	
 	/**
@@ -192,10 +188,30 @@ public class BTreeFile implements DbFile {
 	 * @return the left-most leaf page possibly containing the key field f
 	 * 
 	 */
-	private BTreeLeafPage findLeafPage(TransactionId tid, HashMap<PageId, Page> dirtypages, BTreePageId pid, Permissions perm,
-			Field f) 
+	private BTreeLeafPage findLeafPage(TransactionId tid, HashMap<PageId, Page> dirtypages,
+									   BTreePageId pid, Permissions perm, Field f)
 					throws DbException, TransactionAbortedException {
-		// some code goes here
+		if (pid.pgcateg() == BTreePageId.LEAF) return (BTreeLeafPage) getPage(tid, dirtypages, pid, perm);
+		if (pid.pgcateg() == BTreePageId.INTERNAL) {
+			BTreeInternalPage curPage = (BTreeInternalPage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
+			BTreeInternalPageIterator itr = (BTreeInternalPageIterator) curPage.iterator();
+			if (f == null) {
+				BTreeEntry fstEntry = itr.next();
+				BTreePageId leftChildPid = fstEntry.getLeftChild();
+				return findLeafPage(tid, dirtypages, leftChildPid, perm, f);
+			} else {
+				BTreeEntry curEntry = itr.next();
+				while (f.compare(Op.GREATER_THAN, curEntry.getKey())) {
+					if (itr.hasNext()) curEntry = itr.next();
+					else {
+						BTreePageId rightChildPid = curEntry.getRightChild();
+						return findLeafPage(tid, dirtypages, rightChildPid, perm, f);
+					}
+				}
+				BTreePageId leftChildPid = curEntry.getLeftChild();
+				return findLeafPage(tid, dirtypages, leftChildPid, perm, f);
+			}
+		}
         return null;
 	}
 	
@@ -238,7 +254,8 @@ public class BTreeFile implements DbFile {
 	 * @throws IOException
 	 * @throws TransactionAbortedException
 	 */
-	protected BTreeLeafPage splitLeafPage(TransactionId tid, HashMap<PageId, Page> dirtypages, BTreeLeafPage page, Field field) 
+	protected BTreeLeafPage splitLeafPage(TransactionId tid, HashMap<PageId, Page> dirtypages,
+										  BTreeLeafPage page, Field field)
 			throws DbException, IOException, TransactionAbortedException {
 		// some code goes here
         //

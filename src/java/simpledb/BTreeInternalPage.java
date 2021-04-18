@@ -114,7 +114,7 @@ public class BTreeInternalPage extends BTreePage {
 	/** 
 	 * Retrieve the maximum number of entries this page can hold. (The number of keys)
  	 */
-	public int getMaxEntries() {        
+	public int getMaxEntries() {
 		int keySize = td.getFieldType(keyField).getLen();
 		int bitsPerEntryIncludingHeader = keySize * 8 + INDEX_SIZE * 8 + 1;
 		// extraBits are: one parent pointer, 1 byte for child page category, 
@@ -128,7 +128,7 @@ public class BTreeInternalPage extends BTreePage {
 	 * Computes the number of bytes in the header of a B+ internal page with each entry occupying entrySize bytes
 	 * @return the number of bytes in the header
 	 */
-	private int getHeaderSize() {        
+	private int getHeaderSize() {
 		int slotsPerPage = getMaxEntries() + 1;
 		int hb = (slotsPerPage / 8);
 		if (hb * 8 < slotsPerPage) hb++;

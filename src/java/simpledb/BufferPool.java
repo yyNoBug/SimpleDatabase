@@ -139,6 +139,7 @@ public class BufferPool {
             if (pageMap.size() == numPages) evictPage();
             lruQue.refer(pid);
             Page newPage = getPageByPid(pid);
+
             pageMap.put(pid, newPage);
             if (perm == Permissions.READ_WRITE) dirtyMap.put(pid, true);
             else dirtyMap.put(pid, false);
@@ -150,8 +151,7 @@ public class BufferPool {
 
     private Page getPageByPid(PageId pid) throws IOException{
         DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
-        byte[] data = f.readPage(pid).getPageData();
-        return new HeapPage((HeapPageId) pid, data);
+        return f.readPage(pid);
     }
 
     /**
