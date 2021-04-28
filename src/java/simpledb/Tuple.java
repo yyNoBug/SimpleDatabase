@@ -18,6 +18,19 @@ public class Tuple implements Serializable {
     private RecordId recordId;
     private final ArrayList<Field> fieldAr;
 
+    public static Tuple merge(Tuple t1, Tuple t2) {
+        TupleDesc td = TupleDesc.merge(t1.getTupleDesc(), t2.getTupleDesc());
+        Tuple ret = new Tuple(td);
+        int l1 = t1.getTupleDesc().numFields(), l2 = t2.getTupleDesc().numFields();
+        for (int i = 0; i < l1; ++i) {
+            ret.setField(i, t1.getField(i));
+        }
+        for (int i = 0; i < l2; ++i) {
+            ret.setField(l1 + i, t2.getField(i));
+        }
+        return ret;
+    }
+
     /**
      * Create a new tuple with the specified schema (type).
      *

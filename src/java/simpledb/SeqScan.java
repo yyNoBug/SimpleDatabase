@@ -14,7 +14,7 @@ public class SeqScan implements DbIterator {
     public TransactionId tid;
     public int tableid;
     public String tableAlias;
-    public DbFileIterator dbFileIterator = null;
+    public DbFileIterator dbFileIterator;
 
     /**
      * Creates a sequential scan over the specified table as a part of the
@@ -36,6 +36,7 @@ public class SeqScan implements DbIterator {
         this.tid = tid;
         this.tableid = tableid;
         this.tableAlias = tableAlias;
+        this.dbFileIterator = Database.getCatalog().getDatabaseFile(tableid).iterator(tid);
     }
 
     public SeqScan(TransactionId tid, int tableid) {
@@ -77,7 +78,6 @@ public class SeqScan implements DbIterator {
     }
 
     public void open() throws DbException, TransactionAbortedException {
-        this.dbFileIterator = Database.getCatalog().getDatabaseFile(tableid).iterator(tid);
         dbFileIterator.open();
     }
 
@@ -108,7 +108,6 @@ public class SeqScan implements DbIterator {
 
     public void close() {
         dbFileIterator.close();
-        this.dbFileIterator = null;
     }
 
     public void rewind() throws DbException, NoSuchElementException,
