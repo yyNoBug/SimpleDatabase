@@ -1,5 +1,8 @@
 package simpledb;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+
 /**
  * Knows how to compute some aggregate over a set of StringFields.
  */
@@ -7,17 +10,34 @@ public class StringAggregator implements Aggregator {
 
     private static final long serialVersionUID = 1L;
 
+    int gbField;
+    Type gbFieldType;
+    int aField;
+    Op what;
+    TupleDesc td;
+
+    private final HashMap<Field, Integer> cntMap;
+
     /**
      * Aggregate constructor
-     * @param gbfield the 0-based index of the group-by field in the tuple, or NO_GROUPING if there is no grouping
-     * @param gbfieldtype the type of the group by field (e.g., Type.INT_TYPE), or null if there is no grouping
-     * @param afield the 0-based index of the aggregate field in the tuple
+     * @param gbField the 0-based index of the group-by field in the tuple, or NO_GROUPING if there is no grouping
+     * @param gbFieldType the type of the group by field (e.g., Type.INT_TYPE), or null if there is no grouping
+     * @param aField the 0-based index of the aggregate field in the tuple
      * @param what aggregation operator to use -- only supports COUNT
      * @throws IllegalArgumentException if what != COUNT
      */
 
-    public StringAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
-        // some code goes here
+    public StringAggregator(int gbField, Type gbFieldType, int aField, Op what) {
+        this.gbField = gbField;
+        this.gbFieldType = gbFieldType;
+        this.aField = aField;
+        this.what = what;
+        this.cntMap = new HashMap<>();
+
+        if (!what.equals(Op.COUNT))
+            throw new IllegalArgumentException("@StringAggregator: Not implemented.");
+        if (gbField == NO_GROUPING) td = new TupleDesc(new Type[]{Type.INT_TYPE});
+        else td = new TupleDesc(new Type[]{gbFieldType, Type.INT_TYPE});
     }
 
     /**
@@ -25,7 +45,8 @@ public class StringAggregator implements Aggregator {
      * @param tup the Tuple containing an aggregate field and a group-by field
      */
     public void mergeTupleIntoGroup(Tuple tup) {
-        // some code goes here
+        Field groupKey = (gbField == NO_GROUPING) ? null : tup.getField(gbField);
+        cntMap.merge(groupKey, 1, Integer::sum);
     }
 
     /**
@@ -37,8 +58,22 @@ public class StringAggregator implements Aggregator {
      *   aggregate specified in the constructor.
      */
     public DbIterator iterator() {
-        // some code goes here
-        throw new UnsupportedOperationException("please implement me for lab3");
+        ArrayList<Tuple> tupleList = new ArrayList<>();
+        for (Field groupKey : cntMap.keySet()) {
+            Field result = new IntField(cntMap.get(groupKey));
+            Tuple t = new Tuple(td);
+            if (gbField == NO_GROUPING) t.setField(0, result);
+            else {
+                t.setField(0, groupKey);
+                t.setField(1, result);
+            }
+            tupleList.add(t);
+        }
+        return new TupleIterator(td, tupleList);
+    }
+
+    public TupleDesc getTupleDesc() {
+        return td;
     }
 
 }

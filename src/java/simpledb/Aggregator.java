@@ -7,14 +7,14 @@ import java.io.Serializable;
  * list of Tuples.
  */
 public interface Aggregator extends Serializable {
-    static final int NO_GROUPING = -1;
+    int NO_GROUPING = -1;
 
     /**
      * SUM_COUNT and SC_AVG will
      * only be used in lab7, you are not required
      * to implement them until then.
      * */
-    public enum Op implements Serializable {
+    enum Op implements Serializable {
         MIN, MAX, SUM, AVG, COUNT,
         /**
          * SUM_COUNT: compute sum and count simultaneously, will be
@@ -74,12 +74,14 @@ public interface Aggregator extends Serializable {
      *
      * @param tup the Tuple containing an aggregate field and a group-by field
      */
-    public void mergeTupleIntoGroup(Tuple tup);
+    void mergeTupleIntoGroup(Tuple tup);
 
     /**
      * Create a DbIterator over group aggregate results.
      * @see simpledb.TupleIterator for a possible helper
      */
-    public DbIterator iterator();
+    DbIterator iterator();
+
+    TupleDesc getTupleDesc();
     
 }
