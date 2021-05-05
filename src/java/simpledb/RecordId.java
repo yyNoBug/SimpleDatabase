@@ -10,8 +10,8 @@ public class RecordId implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    public PageId pid;
-    public int tupleno;
+    PageId pid;
+    int tupleno;
 
     /**
      * Creates a new RecordId referring to the specified PageId and tuple

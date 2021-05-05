@@ -26,15 +26,15 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
-    public int numPages;
-    public LRUQue lruQue; // LRU policy.
-    public HashMap<PageId, Page> pageMap;
-    public HashMap<PageId, Boolean> dirtyMap;
+    public final int numPages;
+    public final LRUQue lruQue; // LRU policy.
+    public final HashMap<PageId, Page> pageMap;
+    public final HashMap<PageId, Boolean> dirtyMap;
 
     private static class LRUQue {
-        private Node start, end;
-        private HashMap<PageId, Node> map;
-        private int numPages;
+        private final Node start, end;
+        private final HashMap<PageId, Node> map;
+        private final int numPages;
 
         public static class Node {
             public Node pre, post;
@@ -217,7 +217,7 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         DbFile f = Database.getCatalog().getDatabaseFile(tableId);
         ArrayList<Page> dirtyPages = f.insertTuple(tid, t);
-        for (Page page: dirtyPages) page.markDirty(true, tid);
+        addPages(tid, dirtyPages);
     }
 
     /**
@@ -237,7 +237,21 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         DbFile f = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
         ArrayList<Page> dirtyPages = f.deleteTuple(tid, t);
-        for (Page page: dirtyPages) page.markDirty(true, tid);
+        addPages(tid, dirtyPages);
+    }
+
+    private synchronized void addPages(TransactionId tid, ArrayList<Page> dirtyPages) throws DbException {
+        for (Page page: dirtyPages) {
+            page.markDirty(true, tid);
+
+            if (pageMap.containsKey(page.getId())) {
+                dirtyMap.replace(page.getId(), true); // Not sure.
+            }
+            if (pageMap.size() == numPages) evictPage();
+            lruQue.refer(page.getId());
+            pageMap.put(page.getId(), page);
+            dirtyMap.put(page.getId(), true); // Not sure.
+        }
     }
 
     /**
