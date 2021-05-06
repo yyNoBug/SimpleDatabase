@@ -245,7 +245,9 @@ public class BufferPool {
             page.markDirty(true, tid);
 
             if (pageMap.containsKey(page.getId())) {
+                lruQue.refer(page.getId());
                 dirtyMap.replace(page.getId(), true); // Not sure.
+                return;
             }
             if (pageMap.size() == numPages) evictPage();
             lruQue.refer(page.getId());

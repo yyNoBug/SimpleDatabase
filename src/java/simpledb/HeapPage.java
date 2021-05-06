@@ -328,25 +328,31 @@ public class HeapPage implements Page {
      * (note that this iterator shouldn't return tuples in empty slots!)
      */
     public Iterator<Tuple> iterator() {
-        return new HpTpIterator(this.tuples);
+        return new HeapTupleIterator();
     }
 
-    static private class HpTpIterator implements Iterator<Tuple> {
-        int loc = 0;
-        Tuple[] tuples;
+    private class HeapTupleIterator implements Iterator<Tuple> {
+        int loc;
 
-        public HpTpIterator(Tuple[] tuples) {
-            this.tuples = tuples;
+        public HeapTupleIterator() {
+            loc = 0;
         }
 
         @Override
         public boolean hasNext() {
-            if (loc >= tuples.length) return false;
-            return tuples[loc] != null;
+            while (loc < tuples.length) {
+                if (isSlotUsed(loc)) {
+                    assert tuples[loc] != null;
+                    return true;
+                }
+                loc++;
+            }
+            return false;
         }
 
         @Override
         public Tuple next() {
+            if (!hasNext()) throw new NoSuchElementException("@HeapPage::next()");
             loc ++;
             return tuples[loc - 1];
         }

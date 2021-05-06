@@ -144,8 +144,8 @@ public class HeapFile implements DbFile {
 
     private class HeapFileIterator implements DbFileIterator {
         TransactionId tid;
-        public Iterator<Tuple> tupleIterator = null;
-        public int curPageNum = -1;
+        Iterator<Tuple> tupleIterator = null;
+        int curPageNum = -1;
 
         public HeapFileIterator(TransactionId tid) {
             this.tid = tid;
@@ -162,7 +162,14 @@ public class HeapFile implements DbFile {
         public boolean hasNext() throws DbException, TransactionAbortedException {
             if (tupleIterator == null) return false;
             if (tupleIterator.hasNext()) return true;
-            if (curPageNum < numPages() - 1) return true;
+            int nxtPageNum = curPageNum + 1;
+            while (nxtPageNum < numPages()) {
+                HeapPage nxt = (HeapPage) Database.getBufferPool().
+                        getPage(tid, new HeapPageId(getId(), nxtPageNum), Permissions.READ_ONLY);
+                Iterator<Tuple> it = nxt.iterator();
+                if (it.hasNext()) return true;
+                nxtPageNum++;
+            }
             return false;
         }
 
@@ -170,11 +177,20 @@ public class HeapFile implements DbFile {
         public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
             if (tupleIterator == null) throw new NoSuchElementException("@HeapFileIterator::next(): Not opened.");
             if (tupleIterator.hasNext()) return tupleIterator.next();
-            if (curPageNum >= numPages() - 1) throw new NoSuchElementException("@HeapFileIterator::next()");
-            curPageNum += 1;
-            tupleIterator = ((HeapPage) Database.getBufferPool().
-                    getPage(tid, new HeapPageId(getId(), curPageNum), Permissions.READ_ONLY)).iterator();
-            return tupleIterator.next();
+
+            int nxtPageNum = curPageNum + 1;
+            while (nxtPageNum < numPages()) {
+                HeapPage nxt = (HeapPage) Database.getBufferPool().
+                        getPage(tid, new HeapPageId(getId(), nxtPageNum), Permissions.READ_ONLY);
+                Iterator<Tuple> it = nxt.iterator();
+                if (it.hasNext()) {
+                    curPageNum = nxtPageNum;
+                    tupleIterator = it;
+                    return it.next();
+                }
+                nxtPageNum++;
+            }
+            throw new NoSuchElementException("@HeapFileIterator::next()");
         }
 
         @Override
