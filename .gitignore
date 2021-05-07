@@ -1,6 +1,7 @@
 /.idea/
 /bin/
 /dist/
+/dataset/
 /log
 /simpledb.iml
 /some_data_file.*
