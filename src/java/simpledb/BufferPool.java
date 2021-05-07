@@ -29,7 +29,6 @@ public class BufferPool {
     public final int numPages;
     public final LRUQue lruQue; // LRU policy.
     public final HashMap<PageId, Page> pageMap;
-    public final HashMap<PageId, Boolean> dirtyMap;
 
     private static class LRUQue {
         private final Node start, end;
@@ -95,7 +94,6 @@ public class BufferPool {
         this.numPages = numPages;
         this.lruQue = new LRUQue(numPages);
         this.pageMap = new HashMap<>();
-        this.dirtyMap = new HashMap<>();
     }
     
     public static int getPageSize() {
@@ -129,27 +127,23 @@ public class BufferPool {
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-        try {
-            if (pageMap.containsKey(pid)) { // hit
-                lruQue.refer(pid);
-                if (perm == Permissions.READ_WRITE) dirtyMap.replace(pid, true);
-                return pageMap.get(pid);
-            }
-            // miss
-            if (pageMap.size() == numPages) evictPage();
-            lruQue.refer(pid);
-            Page newPage = getPageByPid(pid);
 
-            pageMap.put(pid, newPage);
-            if (perm == Permissions.READ_WRITE) dirtyMap.put(pid, true);
-            else dirtyMap.put(pid, false);
-            return newPage;
-        } catch (IOException e) {
-            throw new DbException("@getPage");
+        if (pageMap.containsKey(pid)) { // hit
+            lruQue.refer(pid);
+            Page page = pageMap.get(pid);
+            page.markDirty(true, tid);
+            return page;
         }
+        // miss
+        if (pageMap.size() == numPages) evictPage();
+        lruQue.refer(pid);
+        Page newPage = getPageByPid(pid);
+        newPage.markDirty(perm == Permissions.READ_WRITE, tid);
+        pageMap.put(pid, newPage);
+        return newPage;
     }
 
-    private Page getPageByPid(PageId pid) throws IOException{
+    private Page getPageByPid(PageId pid) {
         DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
         return f.readPage(pid);
     }
@@ -246,13 +240,11 @@ public class BufferPool {
 
             if (pageMap.containsKey(page.getId())) {
                 lruQue.refer(page.getId());
-                dirtyMap.replace(page.getId(), true); // Not sure.
                 return;
             }
             if (pageMap.size() == numPages) evictPage();
             lruQue.refer(page.getId());
             pageMap.put(page.getId(), page);
-            dirtyMap.put(page.getId(), true); // Not sure.
         }
     }
 
@@ -276,12 +268,11 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         if (!pageMap.containsKey(pid)) return;
         try {
-            if (dirtyMap.get(pid)) flushPage(pid);
+            if (pageMap.get(pid).isDirty() != null) flushPage(pid);
         } catch (IOException e) {
             e.printStackTrace();
         }
         pageMap.remove(pid);
-        dirtyMap.remove(pid);
         lruQue.remove(pid);
     }
 
@@ -291,9 +282,10 @@ public class BufferPool {
      */
     private synchronized void flushPage(PageId pid) throws IOException {
         if (!pageMap.containsKey(pid)) return;
-        if (!dirtyMap.get(pid)) return;
+        if (pageMap.get(pid).isDirty() == null) return;
         DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
         Page p = pageMap.get(pid);
+        p.markDirty(false, null);
         f.writePage(p);
     }
 
@@ -311,11 +303,10 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         PageId victim = lruQue.evict();
         try {
-            if (dirtyMap.get(victim)) flushPage(victim);
+            if (pageMap.get(victim).isDirty() != null) flushPage(victim);
         } catch (IOException e) {
             throw new DbException("@evictPage");
         }
-        dirtyMap.remove(victim);
         pageMap.remove(victim);
     }
 
