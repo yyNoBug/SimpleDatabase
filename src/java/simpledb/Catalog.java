@@ -79,29 +79,29 @@ public class Catalog {
 
     /**
      * Returns the tuple descriptor (schema) of the specified table
-     * @param tableid The id of the table, as specified by the DbFile.getId()
+     * @param tableId The id of the table, as specified by the DbFile.getId()
      *     function passed to addTable
      * @throws NoSuchElementException if the table doesn't exist
      */
-    public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
-        if (!catItemMap.containsKey(tableid)) throw new NoSuchElementException("@getDatabaseFile");
-        return catItemMap.get(tableid).dbFile.getTupleDesc();
+    public TupleDesc getTupleDesc(int tableId) throws NoSuchElementException {
+        if (!catItemMap.containsKey(tableId)) throw new NoSuchElementException("@getDatabaseFile");
+        return catItemMap.get(tableId).dbFile.getTupleDesc();
     }
 
     /**
      * Returns the DbFile that can be used to read the contents of the
      * specified table.
-     * @param tableid The id of the table, as specified by the DbFile.getId()
+     * @param tableId The id of the table, as specified by the DbFile.getId()
      *     function passed to addTable
      */
-    public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
-        if (!catItemMap.containsKey(tableid)) throw new NoSuchElementException("@getDatabaseFile");
-        return catItemMap.get(tableid).dbFile;
+    public DbFile getDatabaseFile(int tableId) throws NoSuchElementException {
+        if (!catItemMap.containsKey(tableId)) throw new NoSuchElementException("@getDatabaseFile");
+        return catItemMap.get(tableId).dbFile;
     }
 
-    public String getPrimaryKey(int tableid) {
-        if (!catItemMap.containsKey(tableid)) throw new NoSuchElementException("@getDatabaseFile");
-        return catItemMap.get(tableid).pkeyField;
+    public String getPrimaryKey(int tableId) {
+        if (!catItemMap.containsKey(tableId)) throw new NoSuchElementException("@getDatabaseFile");
+        return catItemMap.get(tableId).pkeyField;
     }
 
     public Iterator<Integer> tableIdIterator() {

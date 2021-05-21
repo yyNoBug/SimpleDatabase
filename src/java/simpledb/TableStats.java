@@ -1,6 +1,5 @@
 package simpledb;
 
-import javax.xml.crypto.Data;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -78,12 +77,12 @@ public class TableStats {
      *            sequential-scan IO and disk seeks.
      */
 
-    int tableid;
+    int tableId;
     int ioCostPerPage;
     int numTuples;
     Object[] histograms;
 
-    public TableStats(int tableid, int ioCostPerPage) {
+    public TableStats(int tableId, int ioCostPerPage) {
         // For this function, you'll have to get the
         // DbFile for the table in question,
         // then scan through its tuples and calculate
@@ -93,11 +92,11 @@ public class TableStats {
         // in a single scan of the table.
         // some code goes here
 
-        this.tableid = tableid;
+        this.tableId = tableId;
         this.ioCostPerPage = ioCostPerPage;
         this.numTuples = 0;
 
-        int numFields = Database.getCatalog().getTupleDesc(tableid).numFields();
+        int numFields = Database.getCatalog().getTupleDesc(tableId).numFields();
         int[] maxInt = new int[numFields];
         int[] minInt = new int[numFields];
         this.histograms = new Object[numFields];
@@ -106,7 +105,7 @@ public class TableStats {
             minInt[i] = 99999999;
         }
 
-        DbFileIterator dbFileIterator = Database.getCatalog().getDatabaseFile(tableid).iterator(new TransactionId());
+        DbFileIterator dbFileIterator = Database.getCatalog().getDatabaseFile(tableId).iterator(new TransactionId());
         try {
             dbFileIterator.open();
             while (dbFileIterator.hasNext()) {
@@ -163,7 +162,7 @@ public class TableStats {
      */
     public double estimateScanCost() {
         // some code goes here
-        return ioCostPerPage * Database.getCatalog().getDatabaseFile(tableid).numPages();
+        return ioCostPerPage * Database.getCatalog().getDatabaseFile(tableId).numPages();
     }
 
     /**
