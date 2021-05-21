@@ -1,8 +1,17 @@
 package simpledb;
 
+import static java.lang.Math.max;
+import static java.lang.Math.min;
+
 /** A class to represent a fixed-width histogram over a single integer-based field.
  */
 public class IntHistogram {
+
+    int buckets;
+    int min;
+    int max;
+    int[] bucketCnt;
+    int bucketWidth;
 
     /**
      * Create a new IntHistogram.
@@ -21,7 +30,16 @@ public class IntHistogram {
      * @param max The maximum integer value that will ever be passed to this class for histogramming
      */
     public IntHistogram(int buckets, int min, int max) {
-    	// some code goes here
+        this.buckets = min(buckets, max - min + 1);
+    	this.min = min;
+    	this.max = max;
+    	this.bucketCnt = new int[this.buckets];
+    	this.bucketWidth = (int) Math.round((max - min + 1) * 1.0 / this.buckets);
+    }
+
+    private int findBucket(int v) {
+        int vv = v - this.min;
+        return min(vv / bucketWidth, buckets - 1);
     }
 
     /**
@@ -29,7 +47,7 @@ public class IntHistogram {
      * @param v Value to add to the histogram
      */
     public void addValue(int v) {
-    	// some code goes here
+    	bucketCnt[findBucket(v)]++;
     }
 
     /**
@@ -43,8 +61,41 @@ public class IntHistogram {
      * @return Predicted selectivity of this particular operator and value
      */
     public double estimateSelectivity(Predicate.Op op, int v) {
+        if (v < this.min || v > this.max) {
+            switch (op) {
+                case GREATER_THAN_OR_EQ: case GREATER_THAN:
+                    return v < this.min ? 1.0 : 0.0;
+                case LESS_THAN_OR_EQ: case LESS_THAN:
+                    return v < this.min ? 0.0 : 1.0;
+                case NOT_EQUALS:
+                    return 1.0;
+                case EQUALS:
+                    return 0.0;
+            }
+        }
+        int no = findBucket(v);
+        int left = 0, right = 0, total = 0;
+        for (int i = 0; i < no; ++i) left += bucketCnt[i];
+        for (int i = no + 1; i < buckets; ++i) right += bucketCnt[i];
+        total = left + right + bucketCnt[no];
+        int bucketStart = no * bucketWidth + min;
+        int bucketEnd = (no == buckets - 1) ? max + 1 : (no + 1) * bucketWidth + min;
+        int width = bucketEnd - bucketStart;
 
-    	// some code goes here
+        switch (op) {
+            case EQUALS:
+                return 1.0 * bucketCnt[no] / width / total;
+            case NOT_EQUALS:
+                return 1.0 - 1.0 * bucketCnt[no] / width / total;
+            case LESS_THAN:
+                return (left + 1.0 * bucketCnt[no] * (v - bucketStart) / width) / total;
+            case GREATER_THAN:
+                return (right + 1.0 * bucketCnt[no] * (bucketEnd - v - 1) / width) / total;
+            case LESS_THAN_OR_EQ:
+                return 1.0 - (right + 1.0 * bucketCnt[no] * (bucketEnd - v - 1) / width) / total;
+            case GREATER_THAN_OR_EQ:
+                return 1.0 - (left + 1.0 * bucketCnt[no] * (v - bucketStart) / width) / total;
+        }
         return -1.0;
     }
     
@@ -66,7 +117,10 @@ public class IntHistogram {
      * @return A string describing this histogram, for debugging purposes
      */
     public String toString() {
-        // some code goes here
-        return null;
+        StringBuilder s = new StringBuilder();
+        s.append("IntHistogram").append(" ,max: ").append(max)
+        .append(" ,min: ").append(min)
+        .append(" ,buckets: ").append(buckets);
+        return s.toString();
     }
 }
