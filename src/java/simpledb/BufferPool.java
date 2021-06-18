@@ -3,6 +3,7 @@ package simpledb;
 import java.io.*;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -12,7 +13,7 @@ import java.util.*;
  * The BufferPool is also responsible for locking;  when a transaction fetches
  * a page, BufferPool checks that the transaction has the appropriate
  * locks to read/write the page.
- * 
+ *
  * @Threadsafe, all fields are final
  */
 public class BufferPool {
@@ -20,7 +21,7 @@ public class BufferPool {
     private static final int PAGE_SIZE = 4096;
 
     private static int pageSize = PAGE_SIZE;
-    
+
     /** Default number of pages passed to the constructor. This is used by
     other classes. BufferPool should use the numPages argument to the
     constructor instead. */
@@ -28,11 +29,14 @@ public class BufferPool {
 
     public final int numPages;
     public final LRUQue lruQue; // LRU policy.
-    public final HashMap<PageId, Page> pageMap;
+    public final Map<PageId, Page> pageMap;
+    public LockManager lockManager;
+
 
     private static class LRUQue {
         private final Node start, end;
-        private final HashMap<PageId, Node> map;
+        private final Map<PageId, Node> map;
+        private final Map<PageId, Page> pageMap;
         private final int numPages;
 
         public static class Node {
@@ -48,12 +52,13 @@ public class BufferPool {
             }
         }
 
-        public LRUQue(int numPages) {
+        public LRUQue(int numPages, Map<PageId, Page> pageMap) {
             this.start = new Node();
             this.end = new Node();
             start.post = end;
             end.pre = start;
-            this.map = new HashMap<>();
+            this.map = new ConcurrentHashMap<>();
+            this.pageMap = pageMap;
             this.numPages = numPages;
         }
 
@@ -73,7 +78,18 @@ public class BufferPool {
 
         public PageId evict() throws DbException {
             if (start.post == end) throw new DbException("@evict");
-            PageId victim = start.post.pid;
+            Node cur = start.post;
+            PageId victim = cur.pid;
+            while (pageMap.get(victim).isDirty() != null) {
+                cur = cur.post;
+//                if (cur == end) throw new DbException("All pages in buffer pool are dirty");
+                if (cur == end) {
+                    victim = start.post.pid;
+                    System.err.println("All pages in buffer pool are dirty");
+                    break;
+                }
+                victim = cur.pid;
+            }
             remove(victim);
             return victim;
         }
@@ -92,19 +108,20 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         this.numPages = numPages;
-        this.lruQue = new LRUQue(numPages);
-        this.pageMap = new HashMap<>();
+        this.pageMap = new ConcurrentHashMap<>();
+        this.lruQue = new LRUQue(numPages, pageMap);
+        this.lockManager = new LockManager();
     }
-    
+
     public static int getPageSize() {
       return pageSize;
     }
-    
+
     // THIS FUNCTION SHOULD ONLY BE USED FOR TESTING!!
     public static void setPageSize(int pageSize) {
     	BufferPool.pageSize = pageSize;
     }
-    
+
     // THIS FUNCTION SHOULD ONLY BE USED FOR TESTING!!
     public static void resetPageSize() {
     	BufferPool.pageSize = PAGE_SIZE;
@@ -132,6 +149,7 @@ public class BufferPool {
             lruQue.refer(pid);
             Page page = pageMap.get(pid);
             page.markDirty(true, tid);
+            lockManager.acquireLock(tid, pid, perm);
             return page;
         }
         // miss
@@ -140,6 +158,7 @@ public class BufferPool {
         Page newPage = getPageByPid(pid);
         newPage.markDirty(perm == Permissions.READ_WRITE, tid);
         pageMap.put(pid, newPage);
+        lockManager.acquireLock(tid, pid, perm);
         return newPage;
     }
 
@@ -157,9 +176,8 @@ public class BufferPool {
      * @param tid the ID of the transaction requesting the unlock
      * @param pid the ID of the page to unlock
      */
-    public  void releasePage(TransactionId tid, PageId pid) {
-        // some code goes here
-        // not necessary for lab1|lab2
+    public void releasePage(TransactionId tid, PageId pid) {
+        lockManager.releasePage(tid, pid);
     }
 
     /**
@@ -168,15 +186,12 @@ public class BufferPool {
      * @param tid the ID of the transaction requesting the unlock
      */
     public void transactionComplete(TransactionId tid) throws IOException {
-        // some code goes here
-        // not necessary for lab1|lab2
+        transactionComplete(tid, true);
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
-    public boolean holdsLock(TransactionId tid, PageId p) {
-        // some code goes here
-        // not necessary for lab1|lab2
-        return false;
+    public boolean holdsLock(TransactionId tid, PageId pid) {
+        return lockManager.holdsLock(tid, pid);
     }
 
     /**
@@ -188,20 +203,33 @@ public class BufferPool {
      */
     public void transactionComplete(TransactionId tid, boolean commit)
         throws IOException {
-        // some code goes here
-        // not necessary for lab1|lab2
+//        System.err.println("here");
+        if (commit) flushPages(tid);
+        else {
+            Iterator<Map.Entry<LockManager.TPidPair, LockManager.LockStatus>> itr = lockManager.getLockStatusIterator();
+            while (itr.hasNext()) {
+                Map.Entry<LockManager.TPidPair, LockManager.LockStatus> entry = itr.next();
+                if (entry.getKey().getTid().equals(tid) && entry.getValue().getPerm() == Permissions.READ_WRITE)
+                    discardPage(entry.getKey().getPid());
+            }
+            itr = lockManager.getLockStatusIterator();
+            while (itr.hasNext()) {
+                Map.Entry<LockManager.TPidPair, LockManager.LockStatus> entry = itr.next();
+                if (entry.getKey().getTid().equals(tid)) entry.getValue().unlock();
+            }
+        }
     }
 
     /**
      * Add a tuple to the specified table on behalf of transaction tid.  Will
-     * acquire a write lock on the page the tuple is added to and any other 
-     * pages that are updated (Lock acquisition is not needed for lab2). 
+     * acquire a write lock on the page the tuple is added to and any other
+     * pages that are updated (Lock acquisition is not needed for lab2).
      * May block if the lock(s) cannot be acquired.
-     * 
+     *
      * Marks any pages that were dirtied by the operation as dirty by calling
-     * their markDirty bit, and adds versions of any pages that have 
-     * been dirtied to the cache (replacing any existing versions of those pages) so 
-     * that future requests see up-to-date pages. 
+     * their markDirty bit, and adds versions of any pages that have
+     * been dirtied to the cache (replacing any existing versions of those pages) so
+     * that future requests see up-to-date pages.
      *
      * @param tid the transaction adding the tuple
      * @param tableId the table to add the tuple to
@@ -220,9 +248,9 @@ public class BufferPool {
      * other pages that are updated. May block if the lock(s) cannot be acquired.
      *
      * Marks any pages that were dirtied by the operation as dirty by calling
-     * their markDirty bit, and adds versions of any pages that have 
-     * been dirtied to the cache (replacing any existing versions of those pages) so 
-     * that future requests see up-to-date pages. 
+     * their markDirty bit, and adds versions of any pages that have
+     * been dirtied to the cache (replacing any existing versions of those pages) so
+     * that future requests see up-to-date pages.
      *
      * @param tid the transaction deleting the tuple.
      * @param t the tuple to delete
@@ -261,7 +289,7 @@ public class BufferPool {
         Needed by the recovery manager to ensure that the
         buffer pool doesn't keep a rolled back page in its
         cache.
-        
+
         Also used by B+ tree files to ensure that deleted pages
         are removed from the cache so they can be reused safely
     */
@@ -281,6 +309,7 @@ public class BufferPool {
      * @param pid an ID indicating the page to flush
      */
     private synchronized void flushPage(PageId pid) throws IOException {
+//        System.err.println("here");
         if (!pageMap.containsKey(pid)) return;
         if (pageMap.get(pid).isDirty() == null) return;
         DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
@@ -292,8 +321,13 @@ public class BufferPool {
     /** Write all pages of the specified transaction to disk.
      */
     public synchronized void flushPages(TransactionId tid) throws IOException {
-        // some code goes here
-        // not necessary for lab1|lab2
+//        System.err.println("here");
+        Iterator<Map.Entry<LockManager.TPidPair, LockManager.LockStatus>> itr = lockManager.getLockStatusIterator();
+        while (itr.hasNext()) {
+            Map.Entry<LockManager.TPidPair, LockManager.LockStatus> entry = itr.next();
+            if (entry.getKey().getTid().equals(tid) && entry.getValue().getPerm() == Permissions.READ_WRITE)
+                flushPage(entry.getKey().getPid());
+        }
     }
 
     /**

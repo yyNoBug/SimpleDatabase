@@ -1,12 +1,11 @@
 package simpledb.systemtest;
 
+import org.junit.Test;
+import simpledb.*;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-
-import org.junit.Test;
-
-import simpledb.*;
 
 public class JoinTest extends SimpleDbTestBase {
     private static final int COLUMNS = 2;
